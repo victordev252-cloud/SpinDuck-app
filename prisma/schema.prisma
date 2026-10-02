@@ -1,0 +1,170 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum TicketStatus {
+  OPEN
+  PENDING
+  RESOLVED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id               String          @id @default(uuid())
+  username         String          @unique
+  displayName      String
+  email            String?         @unique
+  passwordHash     String
+  role             Role            @default(USER)
+  isBanned         Boolean         @default(false)
+  banReason        String?
+  warningCount     Int             @default(0)
+  freeSpinsUsed    Int             @default(0)
+  paidSpinCredits  Int             @default(0)
+  isUpgraded       Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  lastLogin        DateTime?
+
+  spins            Spin[]
+  results          SpinResult[]
+  notifications    Notification[]
+  payments         Payment[]
+  supportTickets   SupportTicket[]
+  warnings         Warning[]
+  auditLogsTarget  AdminAuditLog[] @relation("TargetUser")
+  auditLogsAdmin   AdminAuditLog[] @relation("AdminUser")
+}
+
+model Spin {
+  id           String       @id @default(uuid())
+  title        String
+  ownerId      String
+  owner        User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  spinCount    Int          @default(0)
+  isPublic     Boolean      @default(true)
+  isDisabled   Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  options      SpinOption[]
+  results      SpinResult[]
+
+  @@index([ownerId])
+}
+
+model SpinOption {
+  id        String   @id @default(uuid())
+  spinId    String
+  spin      Spin     @relation(fields: [spinId], references: [id], onDelete: Cascade)
+  label     String
+  color     String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([spinId])
+}
+
+model SpinResult {
+  id             String   @id @default(uuid())
+  spinId         String
+  spin           Spin     @relation(fields: [spinId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  selectedOption String
+  createdAt      DateTime @default(now())
+
+  @@index([spinId])
+  @@index([userId])
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount        Float
+  currency      String        @default("USD")
+  status        PaymentStatus @default(PENDING)
+  providerId    String?
+  creditsBought Int           @default(1)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("INFO")
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Warning {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reason    String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model SupportTicket {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject   String
+  status    TicketStatus     @default(OPEN)
+  messages  SupportMessage[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([userId])
+}
+
+model SupportMessage {
+  id        String        @id @default(uuid())
+  ticketId  String
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderId  String
+  message   String
+  isAdmin   Boolean       @default(false)
+  createdAt DateTime      @default(now())
+
+  @@index([ticketId])
+}
+
+model AdminAuditLog {
+  id           String   @id @default(uuid())
+  adminId      String
+  admin        User     @relation("AdminUser", fields: [adminId], references: [id], onDelete: Cascade)
+  action       String
+  targetUserId String?
+  targetUser   User?    @relation("TargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+  description  String
+  createdAt    DateTime @default(now())
+
+  @@index([adminId])
+}
